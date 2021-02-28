@@ -7,7 +7,8 @@ import Qt_designer_VNA_Gui
 
 limeSDR = pyLMSS.pyLMS7002Soapy(0)
 lms7002 = limeSDR.LMS7002
-calThreshold = 250  # RSSI threshold to trigger RX DC cal. 250 is ~10% slower than 500
+
+calThreshold = 500  # RSSI threshold to trigger RX DC cal. 250 is ~50% slower than 500
 
 RxChan = 'A'
 TxChan = 'A'
@@ -30,6 +31,8 @@ class Measurement():
         self.pgaGains = [] # stores pga gains set per Freq during calibration
         self.lnaGains = [] # stores lna gains set per Freq during calibration
         self.refPhase = 0
+        calRSSIbefore = []
+        calRSSIafter = []
         power = []
         freq = []
         
@@ -72,9 +75,11 @@ class Measurement():
             # Check residual RSSI (DC offset?) at the set rx gain
             self.TRF.PD_TXPAD_TRF = 1 # Turn off TXPAD
             calRSSI = lms7002.RxTSP[Rx].RSSI
+            calRSSIbefore.append(calRSSI)
             if calRSSI > calThreshold:
                 self.cal.rxDCLO(Rx, LNA, lnaGain=lnaGain, pgaGain=pgaGain) # takes about 0.9s
                 calRSSI = lms7002.RxTSP[Rx].RSSI
+            calRSSIafter.append(calRSSI)
             self.TRF.PD_TXPAD_TRF = 0 # Turn on TXPAD
 
             # get the (average of 3) RSSI value from the LimeSDR
@@ -99,6 +104,8 @@ class Measurement():
                 else:
                     phase = mcuPhase(Rx) - Calibration.refPhase
                 self.resPhase.append(phase)
+            else:
+                self.resPhase.append(0)
 
             lms7002.verbose = 1000
 
@@ -117,6 +124,10 @@ class Measurement():
                 ui.calThroughProgress.setValue(progress)
                 throCurve.setData(freq, power)
             pyqtgraph.QtGui.QApplication.processEvents() # force GUI update
+
+        if ui.SaveBox.isChecked():
+            reference = str(self) # a unique filename reference for the measurement instance
+            writeDataFile(reference[32:-1], self.measType, self.freqs, self.res, self.resPhase, calRSSIbefore, calRSSIafter)
 
 class Marker():
     '''Create amplitude and frequency markers using infinite lines'''
@@ -274,7 +285,7 @@ def adjustRxGain(lms7002, Rx):
     TxTSP.loadDCIQ(I, Q)
     return pgaGain, lnaGain
 
-def writeDataFile(measName, measType, freqs, res, resPhase):
+def writeDataFile(measName, measType, freqs, res, resPhase, before, after):
 # For compatibility with original 'calculateVNA'. (Filename needs to be amended after.)
     outFileName = 'vna_' + measName + '_DUT_' + measType + '.txt'
     outFile = open(outFileName, 'w')
@@ -283,7 +294,9 @@ def writeDataFile(measName, measType, freqs, res, resPhase):
         f = freqs[i]
         y = res[i]
         phase = resPhase[i]
-        txtRes += str(f) + '\t' + str(y) + '\t' + str(phase) + '\n'
+        rssib = before[i]
+        rssia = after [i]
+        txtRes += str(f) + '\t' + str(y) + '\t' + str(phase) + '\t' + str(rssib) + '\t' + str(rssia) + '\n'
     outFile.write(txtRes)
     outFile.close()
 
