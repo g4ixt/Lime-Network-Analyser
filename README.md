@@ -24,8 +24,9 @@ compatible with the example 'CaluclateVNA.py', I have not yet figured out how to
 plot vector measurements.
 
 With Vector measurements turned off (unticked) it can plot 50 points in 8 - 25 
-sec.  This seems to depend on signal power, with stronger signals being a lot 
-faster.  I haven't figured out why.  It runs slower if you run it in Spyder, and 
+sec.  This seems to depend on signal power, and I think it's related to calibrating residual DC offset.  It runs slower if you run it in Spyder, and 
 about 4 times slower with Vector turned on.
+
+I noticed that the original funcion 'adjustrxgain' only adjusts PGA gain despite returning lnagain as well.  Also noticed that the lnagains hard coded are different for the 900MHz example. Thinking about how to change it.
 
 I am a beginner with Python so my coding may be poor.  Helpful comments welcome.
