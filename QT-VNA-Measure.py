@@ -19,28 +19,13 @@ calThreshold = 500  # RSSI threshold to trigger RX DC cal. 250 is ~50% slower th
 #  PGA receiver Programmable Gain Amplifier - after low pass filter, before ADC
 #  RSSI Received Signal Strength Indicator
 #  PAD transmitter Power Amplifier Driver - final stage
+#  TBB transmitter filter stage controls
 #  DLB Digital Loopback.  Tx signal IQ fed back from Tx port directly to Rx port
 #  BBLB Baseband Loopback.  Tx signal IQ after LPF fed back to input of Rx LPF
 #  RFLB RF Loopback. RF Tx signal from PAD output fed to input of Rx LNA
 #  SXR Receive Synthesiser
 #  SXT Transmit Synthesiser
 #  TDD Mode = 1. The receive IQ mixer uses the signal from the transmit synthesizer
-
-# CG_IAMP_TBB_(1, 2)[5:0]: This controls the front-end gain of the TBB. For a given
-# gain value, this control value varies with the set TX mode. After resistance
-# calibration, the following table gives the nominal values for each frequency setting.
-# However, this table is to be updated and corrected after calibration. Default: 37
-# Low Band:
-# 5 – when 2.4MHz
-# 7 – when 2.74MHz
-# 12 – when 5.5MHz
-# 18 – when 8.2MHz
-# 24 – when 11MHz
-# High Band:
-# 18 – when 18.5MHz
-# 37 – when 38MHz
-# 54 – when 54MHz
-
 
 
 class Measurement():
@@ -50,28 +35,22 @@ class Measurement():
         # Measure received signal power and phase. Phase is not plotted (yet) but can be saved to file.
         TxTSP = lms7002.TxTSP[hardware.txChan]
         TRF = lms7002.TRF[hardware.txChan]
-        cal = lms7002.calibration
         self.measType = measType
         self.res = []
         self.resPhase = []
         self.pgaGains = []  # stores pga gains set per Freq during calibration
         self.lnaGains = []  # stores lna gains set per Freq during calibration
         self.refPhase = 0
-        calRSSIbefore = []
-        calRSSIafter = []
         power = []
         freq = []
 
         startFreq, endFreq, nFreq, centreFreq, spanFreq = getFreq()
         nFreq += 1  # to give equal frequency spacing around centre freq
         self.freqs = numpy.linspace(startFreq, endFreq, nFreq)
+
         hardware.freqDepVar(startFreq)
         LNA = hardware.lna
-
-        #  initial calibration of Rx DC
-        TRF.PD_TXPAD_TRF = 1  # Turn off tx power amplifier while calibrating RX DC
-        cal.rxDCLO(Rx, hardware.lna, lnaGain=hardware.lnaGain, pgaGain=16)  # Calibrate RX DC
-        TRF.PD_TXPAD_TRF = 0  # Turn on tx power amplifier
+        setTransceiver(Rx, startFreq)
 
         #  valid MAC values are [1,2,'A','B','R','RX','T','TX']. Tells MCU which channel to use for trx, tx, rx
         #  synthesisers SXT and SXR share register addresses so channel is identified by MAC setting
@@ -79,35 +58,31 @@ class Measurement():
 
         for i in range(0, len(self.freqs)):
             f = self.freqs[i] * 1e6
+            # set freq and cal rx DC offset. Both Tx and Rx since rx is using tx PLL
+#            lms7002.verbose = 1000
+            lms7002.SX['T'].setFREQ(f)
+            lms7002.SX['T'].PD_LOCH_T2RBUF = 0  # set to use tx PLL (TDD Mode)
 
             if Calibration != '':  # Set gains for DUT measurement to the calibrated values
                 pgaGain = Calibration.pgaGains[i]
                 lnaGain = Calibration.lnaGains[i]
                 lms7002.RBB[Rx].G_PGA_RBB = pgaGain
                 lms7002.RFE[Rx].G_LNA_RFE = lnaGain
-
-            # set freq and cal rx DC offset. Both Tx and Rx since rx is using tx PLL
-            lms7002.verbose = 1000
-            lms7002.SX['T'].setFREQ(f)
-            lms7002.SX['T'].PD_LOCH_T2RBUF = 0  # set to use tx PLL (TDD Mode)
+            else:
+                # optimise Rx gain for best dynamic range, return the values and append them to cal lists
+                pgaGain, lnaGain = adjustRxGain(lms7002, Rx, i)
+                self.pgaGains.append(pgaGain)
+                self.lnaGains.append(lnaGain)
 
             # set transmit and receive for testing? loopback?
             syncPhase(lms7002, Rx)
 
-            if Calibration == "":
-                # optimise Rx gain for best dynamic range, return the values and append them to lists
-                pgaGain, lnaGain = adjustRxGain(lms7002, Rx)  # fn doesn't change lnagain at all
-                self.pgaGains.append(pgaGain)
-                self.lnaGains.append(lnaGain)
-
             # Check residual RSSI (DC offset?) at the set rx gain
             TRF.PD_TXPAD_TRF = 1  # Turn off transmit power amplifier
-            calRSSI = lms7002.RxTSP[Rx].RSSI  # tests
-            calRSSIbefore.append(calRSSI)
+            calRSSI = lms7002.RxTSP[Rx].RSSI
             if calRSSI > calThreshold:
-                cal.rxDCLO(Rx, LNA, lnaGain=lnaGain, pgaGain=pgaGain)  # takes about 0.9s
+                lms7002.calibration.rxDCLO(Rx, LNA, lnaGain=lnaGain, pgaGain=pgaGain)  # takes about 0.9s
                 calRSSI = lms7002.RxTSP[Rx].RSSI
-            calRSSIafter.append(calRSSI)  # tests
             TRF.PD_TXPAD_TRF = 0  # Turn on transmit power amplifier
 
             # get the (average of 3) RSSI value from the LimeSDR
@@ -139,7 +114,7 @@ class Measurement():
             freq.append(self.freqs[i])
             progress = int((i+1)*100/len(self.freqs))
             if Calibration == '':
-                CalPower = 20 * numpy.log10(calRSSI)  # set to residual value so that log10 is finite
+                CalPower = 0
             else:
                 CalPower = 20 * numpy.log10(Calibration.res[i])
             power.append(DutPower-CalPower)
@@ -153,7 +128,7 @@ class Measurement():
 
         if ui.SaveBox.isChecked():
             reference = str(self)  # a unique filename reference for the measurement instance
-            writeDataFile(reference[32:-1], self.measType, self.freqs, self.res, self.resPhase, calRSSIbefore, calRSSIafter)
+            writeDataFile(reference[32:-1], self.measType, self.freqs, self.res, self.resPhase)
 
 
 class Marker():
@@ -197,15 +172,16 @@ class Marker():
         self.Value = self.line.value()
 
 
-class sdrType():
+class setSDR():
     '''Set values for Lime-Mini or Lime-USB and its frequency-dependent settings'''
 
     def __init__(self):
         self.fRef = 30.72e6
-        self.iAmp = 8  # for TBB.CG_IAMP_TBB - used to set the Tx gain? was 15
+        self.iAmp = 20  # for TBB.CG_IAMP_TBB - controls front-end gain of TBB.  Seems to have little effect.
         self.band1 = 1  # for TRF.SEL_BAND1_TRF
         self.band2 = 0  # for TRF.SEL_BAND2_TRF
-        self.lnaGain = 4  # was 8.  1 to 15 allowed
+        self.lnaGain = 6  # was 8.  1 to 15 allowed
+        self.pgaGain = 1
         self.lna = 'LNAL'
         self.sdrName = 'LimeSDR-USB'
         self.txChan = 'A'
@@ -216,7 +192,7 @@ class sdrType():
         if limeSDR.boardName == 'LimeSDRMini':
             self.sdrName = 'LimeSDR-Mini'
             self.fRef = 40e6
-            self.iAmp = 15  # was 15
+            self.iAmp = 5
             self.band1 = 1
             self.band2 = 0  # not relevant for Mini but presume still need to set it
             self.lnaGain = 6
@@ -243,7 +219,7 @@ class sdrType():
                 self.band1 = 0
                 self.band2 = 1
         else:
-            limeSDR.configureAntenna(startFreq)
+            limeSDR.configureAntenna(startFreq)  # doesn't this do all that above for the usb as well - see pySoapy?
 
 ################################################################
 # MCU related
@@ -329,8 +305,7 @@ def syncPhase(lms7002, Rx):
     SXT.PD_FDIV = 0  # power up forward freq divider of the LO chain
 
 
-def adjustRxGain(lms7002, Rx):
-    # returns pga and lna gains for optimum dynamic range. No, only the pgaGain? 900MHz vers lnagain is different?
+def adjustRxGain(lms7002, Rx, i):  # returns pga and lna gains for optimum dynamic range.
     RBB = lms7002.RBB[Rx]
     RFE = lms7002.RFE[Rx]
     RxTSP = lms7002.RxTSP[Rx]
@@ -339,6 +314,26 @@ def adjustRxGain(lms7002, Rx):
     TxTSP.CMIX_BYP = 'USE'
     RxTSP.GC_BYP = 'USE'
     RxTSP.GCORRQ = 0
+
+    if ui.setGain.isChecked():
+        if i == 0:  # set LNA gain at the start frequency only
+            lnaGain = 1
+            RFE.G_LNA_RFE = 1
+            RBB.G_PGA_RBB = 22  # set PGA gain with a little headroom
+            rssi = mcuRSSI()
+            while rssi < 50e3 and lnaGain < 15:
+                rssi = mcuRSSI()
+                lnaGain += 1
+                RFE.G_LNA_RFE = lnaGain
+                ui.RSSI.setValue(int(rssi))
+                ui.lnaGain.setValue(lnaGain)
+                app.processEvents()
+                hardware.lnaGain = lnaGain  # keep value for next call of adjustRxGain in Analyse()
+                if mcuRSSI() >= 50e3:
+                    break
+    else:
+        lnaGain = ui.lnaGain
+
     pgaGain = 0
     pgaStep = 16
     lnaGain = hardware.lnaGain
@@ -348,23 +343,22 @@ def adjustRxGain(lms7002, Rx):
         RFE.G_LNA_RFE = lnaGain
         if mcuRSSI() < 50e3:
             pgaGain += pgaStep
-            logTxt(str(pgaGain) + '\t' + str(pgaStep) + '\t' + str(mcuRSSI()) + '\n')
+            #  logTxt(str(pgaGain) + '\t' + str(pgaStep) + '\t' + str(mcuRSSI()) + '\n')
+            ui.RSSI.setValue(int(mcuRSSI()))
+            ui.pgaGain.setValue(pgaGain)
+            app.processEvents()
         pgaStep = int(pgaStep / 2)
-
-    RBB.G_PGA_RBB = pgaGain
-    RFE.G_LNA_RFE = lnaGain
 
     TxTSP.CMIX_BYP = 'BYP'
     RxTSP.GC_BYP = 'BYP'
     RxTSP.GCORRQ = 2047
-
     I = 0x7FFF
     Q = 0x8000
     TxTSP.loadDCIQ(I, Q)
     return pgaGain, lnaGain
 
 
-def writeDataFile(measName, measType, freqs, res, resPhase, before, after):
+def writeDataFile(measName, measType, freqs, res, resPhase):
     # For compatibility with original 'calculateVNA'. (Filename needs to be amended after.)
     outFileName = 'vna_' + measName + '_DUT_' + measType + '.txt'
     outFile = open(outFileName, 'w')
@@ -373,44 +367,35 @@ def writeDataFile(measName, measType, freqs, res, resPhase, before, after):
         f = freqs[i]
         y = res[i]
         phase = resPhase[i]
-        rssib = before[i]
-        rssia = after[i]
-        txtRes += str(f) + '\t' + str(y) + '\t' + str(phase) + '\t' + str(rssib) + '\t' + str(rssia) + '\n'
+        txtRes += str(f) + '\t' + str(y) + '\t' + str(phase) + '\t' + '\n'
     outFile.write(txtRes)
     outFile.close()
 
 
-def ConnectSDR():
-    # Connect to SDR and initialise
-    # Set up the shortcuts to pySoapy modules
-    lms7002.verbose = 1000
-    hardware.setVariables()
+def setTransceiver(Rx, startFreq):
+    #  set rx and tx for the start frequency
     TBB = lms7002.TBB[hardware.txChan]  # does this also depend on MAC setting?
     TRF = lms7002.TRF[hardware.txChan]
-    RxTSPA = lms7002.RxTSP['A']
-    RxTSPB = lms7002.RxTSP['B']
+    RxTSP = lms7002.RxTSP[Rx]
     TxTSP = lms7002.TxTSP[hardware.txChan]
     if hardware.txChan == 'A':
         TxNCO = lms7002.NCO["TXA"]
     else:
         TxNCO = lms7002.NCO["TXB"]
 
-    lms7002.fRef = hardware.fRef
-    ui.ConnectButton.setText(hardware.sdrName)
-
+    lms7002.fRef = hardware.fRef  # set correct clock frequency for hardware
     lms7002.MIMO = 'MIMO'
 
     # Initial configuration
     ui.InitialisedMessage.setText("Tuning Clock")
     app.processEvents()
     lms7002.CGEN.setCLK(300e6)  # set clock to 300MHz
-    startFreq, endFreq, nFreq, centreFreq, spanFreq = getFreq()
     hardware.freqDepVar(startFreq)
     ui.InitialisedMessage.setText("Tuning SXT")
     app.processEvents()
 
     startFreq = float(startFreq * 1e6)
-    lms7002.SX['T'].setFREQ(startFreq)  # why is this done only at startFreq?
+    lms7002.SX['T'].setFREQ(startFreq)
 
     # Make ADC and DAC clocks equal
     ui.InitialisedMessage.setText("Setting up RSSI")
@@ -418,24 +403,15 @@ def ConnectSDR():
     lms7002.CGEN.EN_ADCCLKH_CLKGN = 0  # set ADC clock to F_CLKH and DAC clock to F_CLKL
     lms7002.CGEN.CLKH_OV_CLKL_CGEN = 2
 
-    cal = lms7002.calibration
-
-    # configure Rx A
-    RxTSPA.GCORRQ = 2047  # set gain corrector to maximum
-    RxTSPA.GCORRI = 2047
-    RxTSPA.AGC_MODE = 'RSSI'
-    RxTSPA.AGC_BYP = 'USE'
-    RxTSPA.RSSI_MODE = 'RSSI'
-    # configure Rx B
-    RxTSPB.GCORRQ = 2047
-    RxTSPB.GCORRI = 2047
-    RxTSPB.AGC_MODE = 'RSSI'
-    RxTSPB.AGC_BYP = 'USE'
-    RxTSPB.RSSI_MODE = 'RSSI'
-
-    TBB.CG_IAMP_TBB = hardware.iAmp
+    # configure Rx
+    RxTSP.GCORRQ = 2047  # set gain corrector to maximum
+    RxTSP.GCORRI = 2047
+    RxTSP.AGC_MODE = 'RSSI'
+    RxTSP.AGC_BYP = 'USE'
+    RxTSP.RSSI_MODE = 'RSSI'
 
     # Tx calibration
+    TBB.CG_IAMP_TBB = hardware.iAmp
     TxTSP.TSGMODE = 'DC'
     TxTSP.INSEL = 'TEST'
     TxTSP.CMIX_BYP = 'BYP'
@@ -465,6 +441,25 @@ def ConnectSDR():
     lms7002.SX['R'].EN_DIR = 0
     lms7002.SX['T'].PD_LOCH_T2RBUF = 0  # Both RX and TX use the TX PLL
 
+    #  initial calibration of Rx DC
+    TRF.PD_TXPAD_TRF = 1  # Turn off tx power amplifier while calibrating RX DC
+    lms7002.calibration.rxDCLO(Rx, hardware.lna, lnaGain=15, pgaGain=31)
+    TRF.PD_TXPAD_TRF = 0  # Turn on tx power amplifier
+
+    #  valid MAC values are [1,2,'A','B','R','RX','T','TX']. Tells MCU which channel to use for trx, tx, rx
+    #  synthesisers SXT and SXR share register addresses so channel is identified by MAC setting
+    lms7002.MAC = Rx
+
+# connectedButtons(True)
+# ui.InitialisedMessage.setText("Ready")
+
+
+def ConnectSDR():
+    # Connect to SDR and initialise
+
+    # lms7002.verbose = 1000
+    hardware.setVariables()
+    ui.ConnectButton.setText(hardware.sdrName)
     ui.InitialisedMessage.setText("Loading VNA.hex to MCU")
     app.processEvents()
     mcuProgram()  # Load vna.hex to MCU SRAM for measuring RSSI
@@ -498,7 +493,7 @@ def measureButtons(enable):
 
 
 def calReturnLoss():
-    ui.graphWidget.setYRange(-60, 60)
+    ui.graphWidget.setYRange(-100, 100)
     ui.calShortProgress.setValue(0)
     startFreq, endFreq, nFreq, centreFreq, spanFreq = getFreq()
     short.Analyse('', 'A', 'ReturnLoss')
@@ -506,7 +501,7 @@ def calReturnLoss():
 
 
 def calThroughLoss():
-    ui.graphWidget.setYRange(-60, 60)
+    ui.graphWidget.setYRange(-100, 100)
     ui.calThroughProgress.setValue(0)
     startFreq, endFreq, nFreq, centreFreq, spanFreq = getFreq()
     through.Analyse('', 'B', 'ThroughLoss')
@@ -583,7 +578,7 @@ if __name__ == "__main__":
     throCurve = ui.graphWidget.plot([], [], name='Through Loss', pen='c', width=3)
 
     # instantiate measurements, markers, and hardware-dependent variables
-    hardware = sdrType()
+    hardware = setSDR()
     short = Measurement()
     through = Measurement()
     DutRefl = Measurement()
