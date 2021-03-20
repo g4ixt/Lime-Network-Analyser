@@ -33,8 +33,6 @@ class Measurement():
 
     def Analyse(self, Calibration, Rx, measType):
         # Measure received signal power and phase. Phase is not plotted (yet) but can be saved to file.
-        TxTSP = lms7002.TxTSP[hardware.txChan]
-        TRF = lms7002.TRF[hardware.txChan]
         self.measType = measType
         self.res = []
         self.resPhase = []
@@ -50,6 +48,8 @@ class Measurement():
 
         hardware.freqDepVar(startFreq)
         LNA = hardware.lna
+        TxTSP = lms7002.TxTSP[hardware.txChan]
+        TRF = lms7002.TRF[hardware.txChan]
         setTransceiver(Rx, startFreq)
 
         #  valid MAC values are [1,2,'A','B','R','RX','T','TX']. Tells MCU which channel to use for trx, tx, rx
@@ -175,17 +175,6 @@ class Marker():
 class setSDR():
     '''Set values for Lime-Mini or Lime-USB and its frequency-dependent settings'''
 
-    def __init__(self):
-        self.fRef = 30.72e6
-        self.iAmp = 20  # for TBB.CG_IAMP_TBB - controls front-end gain of TBB.  Seems to have little effect.
-        self.band1 = 1  # for TRF.SEL_BAND1_TRF
-        self.band2 = 0  # for TRF.SEL_BAND2_TRF
-        self.lnaGain = 6  # was 8.  1 to 15 allowed
-        self.pgaGain = 1
-        self.lna = 'LNAL'
-        self.sdrName = 'LimeSDR-USB'
-        self.txChan = 'A'
-
     def setVariables(self):
         #  set variables to the correct values for Lime-Mini or Lime-USB
         limeSDR = pyLMSS.pyLMS7002Soapy(0)
@@ -196,16 +185,25 @@ class setSDR():
             self.band1 = 1
             self.band2 = 0  # not relevant for Mini but presume still need to set it
             self.lnaGain = 6
+            self.txChan = 'A'
         else:
-            if ui.TxAorB.value() == 0:
-                self.txChan = 'A'
-            else:
-                self.txChan = 'B'
+            self.sdrName = 'LimeSDR-USB'
+            self.fRef = 30.72e6
+            self.iAmp = 20  # for TBB.CG_IAMP_TBB - controls front-end gain of TBB.  Seems to have little effect.
+            self.band1 = 1  # for TRF.SEL_BAND1_TRF
+            self.band2 = 0  # for TRF.SEL_BAND2_TRF
+            self.lnaGain = 6  # was 8.  1 to 15 allowed
+            self.pgaGain = 1
+            self.lna = 'LNAL'  # not reqd?
 
     def freqDepVar(self, startFreq):
         #  <= 800MHz, tx pwr is +10dB for Band1 vs Band2.  It then falls ~'linearly' to ~equal at ~2100MHz.
         #  >= 2100MHz tx pwr is between 0dB and +15dB for Band 2.  At 2400MHz about +4dB and very peaky at 2900MHz
         if self.sdrName == 'LimeSDR-USB':
+            if ui.TxAorB.value() == 0:
+                self.txChan = 'A'
+            else:
+                self.txChan = 'B'
             if startFreq < 1500:
                 self.lna = 'LNAL'
                 self.band1 = 1
@@ -449,9 +447,9 @@ def setTransceiver(Rx, startFreq):
     #  valid MAC values are [1,2,'A','B','R','RX','T','TX']. Tells MCU which channel to use for trx, tx, rx
     #  synthesisers SXT and SXR share register addresses so channel is identified by MAC setting
     lms7002.MAC = Rx
+    ui.InitialisedMessage.setText("Ready")
 
 # connectedButtons(True)
-# ui.InitialisedMessage.setText("Ready")
 
 
 def ConnectSDR():
