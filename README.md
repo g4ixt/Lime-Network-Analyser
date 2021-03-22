@@ -50,7 +50,7 @@ used for my Lime.
 For the Lime-USB, use the low-band receive port below 1.5GHz and the high band 
 port above.  Use Transmit port 2 above 2.1GHz because it produces more power.
 The limitation seems to be crosstalk between transmit and receive ports, and low 
-output from the transmitter ports at high frequencies (3GHz) which means that 
+output from the transmitter ports at high frequencies (3GHz) where
 noise dominates measurements about 15dB below calibration.
 
 If LNA and PGA gain are at maximum and RSSI during calibration does not reach 
