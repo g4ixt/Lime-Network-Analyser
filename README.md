@@ -1,4 +1,4 @@
-# Lime_network_analyser
+# Lime Network Analyser
  
  This uses the example code from Myriad RF's Lime VNA, 
 https://github.com/myriadrf/pyLMS7002Soapy.git
