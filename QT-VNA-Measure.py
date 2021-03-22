@@ -5,8 +5,8 @@ import pyqtgraph
 from pyLMS7002Soapy import pyLMS7002Soapy as pyLMSS
 import Qt_designer_VNA_Gui
 
-limeSDR = pyLMSS.pyLMS7002Soapy(0)
-lms7002 = limeSDR.LMS7002
+# limeSDR = pyLMSS.pyLMS7002Soapy(0)
+# lms7002 = limeSDR.LMS7002
 
 calThreshold = 500  # RSSI threshold to trigger RX DC cal. 250 is ~50% slower than 500
 # TxChan = 'A'
@@ -32,6 +32,8 @@ class Measurement():
     '''Create measurements of Amplitude and Phase for lists of n frequencies (MHz)'''
 
     def Analyse(self, Calibration, Rx, measType):
+        limeSDR = pyLMSS.pyLMS7002Soapy(0)
+        lms7002 = limeSDR.LMS7002
         # Measure received signal power and phase. Phase is not plotted (yet) but can be saved to file.
         self.measType = measType
         self.res = []
@@ -50,16 +52,17 @@ class Measurement():
         LNA = hardware.lna
         TxTSP = lms7002.TxTSP[hardware.txChan]
         TRF = lms7002.TRF[hardware.txChan]
-        setTransceiver(Rx, startFreq)
+        setTransceiver(lms7002, Rx, startFreq)
 
         #  valid MAC values are [1,2,'A','B','R','RX','T','TX']. Tells MCU which channel to use for trx, tx, rx
         #  synthesisers SXT and SXR share register addresses so channel is identified by MAC setting
         lms7002.MAC = Rx
 
         for i in range(0, len(self.freqs)):
+            lms7002.verbose = 0  # controls logging level.  Set to 1000 for more detail
             f = self.freqs[i] * 1e6
+
             # set freq and cal rx DC offset. Both Tx and Rx since rx is using tx PLL
-#            lms7002.verbose = 1000
             lms7002.SX['T'].setFREQ(f)
             lms7002.SX['T'].PD_LOCH_T2RBUF = 0  # set to use tx PLL (TDD Mode)
 
@@ -89,7 +92,7 @@ class Measurement():
             TxTSP.CMIX_BYP = 'USE'
             lms7002.RxTSP[Rx].GC_BYP = 'USE'  # turn on gain corrector block
             lms7002.RxTSP[Rx].GCORRQ = 0  # set Q channel gain to zero.
-            rssi = 1.0 * mcuRSSI()
+            rssi = 1.0 * mcuRSSI(lms7002)
             TxTSP.CMIX_BYP = 'BYP'
             lms7002.RxTSP[Rx].GC_BYP = 'BYP'
             lms7002.RxTSP[Rx].GCORRQ = 2047
@@ -102,10 +105,10 @@ class Measurement():
             if ui.Phase.isChecked():
                 if Calibration == "":
                     if i == 0:
-                        self.refPhase = mcuPhase(Rx)
-                    phase = mcuPhase(Rx) - self.refPhase  # set cal phase ref=zero at start freq
+                        self.refPhase = mcuPhase(lms7002, Rx)
+                    phase = mcuPhase(lms7002, Rx) - self.refPhase  # set cal phase ref=zero at start freq
                 else:
-                    phase = mcuPhase(Rx) - Calibration.refPhase
+                    phase = mcuPhase(lms7002, Rx) - Calibration.refPhase
                 self.resPhase.append(phase)
             else:
                 self.resPhase.append(0)
@@ -197,6 +200,7 @@ class setSDR():
             self.lna = 'LNAL'  # not reqd?
 
     def freqDepVar(self, startFreq):
+        limeSDR = pyLMSS.pyLMS7002Soapy(0)
         #  <= 800MHz, tx pwr is +10dB for Band1 vs Band2.  It then falls ~'linearly' to ~equal at ~2100MHz.
         #  >= 2100MHz tx pwr is between 0dB and +15dB for Band 2.  At 2400MHz about +4dB and very peaky at 2900MHz
         if self.sdrName == 'LimeSDR-USB':
@@ -223,7 +227,7 @@ class setSDR():
 # MCU related
 
 
-def mcuProgram():
+def mcuProgram(lms7002):
     # Load the MCU firmware for measuring RSSI
     logTxt("Loading MCU program...\t", end="")
     mcu = lms7002.mSPI
@@ -240,7 +244,7 @@ def mcuProgram():
     mcu.P0 = 0
 
 
-def mcuRSSI():
+def mcuRSSI(lms7002):
     # Read averaged RSSI from MCU
     mcu = lms7002.mSPI
     mcu.SPISW_CTRL = 'MCU'
@@ -257,7 +261,7 @@ def mcuRSSI():
     return RSSI
 
 
-def mcuPhase(Rx):
+def mcuPhase(lms7002, Rx):
     # Use MCU to determine the phase
     # Phase is measured by setting I channel gain to zero using Rx TSP gain corrector
     # The Tx phase is then adjusted to minimise RSSI which occurs when Tx phase = Rx phase
@@ -318,16 +322,16 @@ def adjustRxGain(lms7002, Rx, i):  # returns pga and lna gains for optimum dynam
             lnaGain = 1
             RFE.G_LNA_RFE = 1
             RBB.G_PGA_RBB = 22  # set PGA gain with a little headroom
-            rssi = mcuRSSI()
+            rssi = mcuRSSI(lms7002)
             while rssi < 50e3 and lnaGain < 15:
-                rssi = mcuRSSI()
+                rssi = mcuRSSI(lms7002)
                 lnaGain += 1
                 RFE.G_LNA_RFE = lnaGain
                 ui.RSSI.setValue(int(rssi))
                 ui.lnaGain.setValue(lnaGain)
                 app.processEvents()
                 hardware.lnaGain = lnaGain  # keep value for next call of adjustRxGain in Analyse()
-                if mcuRSSI() >= 50e3:
+                if mcuRSSI(lms7002) >= 50e3:
                     break
     else:
         lnaGain = ui.lnaGain
@@ -339,10 +343,10 @@ def adjustRxGain(lms7002, Rx, i):  # returns pga and lna gains for optimum dynam
     while pgaStep > 0:
         RBB.G_PGA_RBB = pgaGain + pgaStep
         RFE.G_LNA_RFE = lnaGain
-        if mcuRSSI() < 50e3:
+        if mcuRSSI(lms7002) < 50e3:
             pgaGain += pgaStep
-            #  logTxt(str(pgaGain) + '\t' + str(pgaStep) + '\t' + str(mcuRSSI()) + '\n')
-            ui.RSSI.setValue(int(mcuRSSI()))
+            #  logTxt(str(pgaGain) + '\t' + str(pgaStep) + '\t' + str(mcuRSSI(lms7002)) + '\n')
+            ui.RSSI.setValue(int(mcuRSSI(lms7002)))
             ui.pgaGain.setValue(pgaGain)
             app.processEvents()
         pgaStep = int(pgaStep / 2)
@@ -370,7 +374,7 @@ def writeDataFile(measName, measType, freqs, res, resPhase):
     outFile.close()
 
 
-def setTransceiver(Rx, startFreq):
+def setTransceiver(lms7002, Rx, startFreq):
     #  set rx and tx for the start frequency
     TBB = lms7002.TBB[hardware.txChan]  # does this also depend on MAC setting?
     TRF = lms7002.TRF[hardware.txChan]
@@ -440,6 +444,8 @@ def setTransceiver(Rx, startFreq):
     lms7002.SX['T'].PD_LOCH_T2RBUF = 0  # Both RX and TX use the TX PLL
 
     #  initial calibration of Rx DC
+    ui.InitialisedMessage.setText("Rx DC calibration")
+    app.processEvents()
     TRF.PD_TXPAD_TRF = 1  # Turn off tx power amplifier while calibrating RX DC
     lms7002.calibration.rxDCLO(Rx, hardware.lna, lnaGain=15, pgaGain=31)
     TRF.PD_TXPAD_TRF = 0  # Turn on tx power amplifier
@@ -454,13 +460,14 @@ def setTransceiver(Rx, startFreq):
 
 def ConnectSDR():
     # Connect to SDR and initialise
-
+    limeSDR = pyLMSS.pyLMS7002Soapy(0)
+    lms7002 = limeSDR.LMS7002
     # lms7002.verbose = 1000
     hardware.setVariables()
     ui.ConnectButton.setText(hardware.sdrName)
     ui.InitialisedMessage.setText("Loading VNA.hex to MCU")
     app.processEvents()
-    mcuProgram()  # Load vna.hex to MCU SRAM for measuring RSSI
+    mcuProgram(lms7002)  # Load vna.hex to MCU SRAM for measuring RSSI
     connectedButtons(True)
     ui.InitialisedMessage.setText("Ready")
 
