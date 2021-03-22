@@ -39,7 +39,11 @@ I have made measurements at a few frequencies in the low and high bands using
 some high quality (12GHz) RF attenuators and some ancient Telonic calibrated 
 mismatches and the results are within about 2dB of expected.
 
-RF Hints
+ERROR TRAPPING
+
+There isn't any.
+
+RF HINTS
 
 I used 10dB attenuators on the transmit output port and receive port, in order 
 to provide a reasonable broadband match to the Device Under Test, because the 
@@ -58,7 +62,7 @@ around 50,000, either the wrong ports are being used or the transmit power is
 low at that frequency.  Try a measurement with no device connected to see what 
 the response is like - anything you see is the noise floor.
 
-Licensing
+LICENCE
 
 pyLMS7002Soapy and the code taken from the examples is copyright 2019 Lime 
 Microsystems and provided under the Apache 2.0 License, so this code also is 
