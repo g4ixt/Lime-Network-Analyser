@@ -39,29 +39,6 @@ I have made measurements at a few frequencies in the low and high bands using
 some high quality (12GHz) RF attenuators and some ancient Telonic calibrated 
 mismatches and the results are within about 2dB of expected.
 
-ERROR TRAPPING
-
-There isn't any.
-
-RF HINTS
-
-I used 10dB attenuators on the transmit output port and receive port, in order 
-to provide a reasonable broadband match to the Device Under Test, because the 
-Lime's match varies.  This makes noise worse of course.  It would be better with 
-6dB attenuators but I didn't have any good ones with the SMA connectors that I 
-used for my Lime.
-
-For the Lime-USB, use the low-band receive port below 1.5GHz and the high band 
-port above.  Use Transmit port 2 above 2.1GHz because it produces more power.
-The limitation seems to be crosstalk between transmit and receive ports, and low 
-output from the transmitter ports at high frequencies (3GHz) where
-noise dominates measurements about 15dB below calibration.
-
-If LNA and PGA gain are at maximum and RSSI during calibration does not reach 
-around 50,000, either the wrong ports are being used or the transmit power is 
-low at that frequency.  Try a measurement with no device connected to see what 
-the response is like - anything you see is the noise floor.
-
 LICENCE
 
 pyLMS7002Soapy and the code taken from the examples is copyright 2019 Lime 
