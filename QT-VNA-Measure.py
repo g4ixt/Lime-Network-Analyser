@@ -5,11 +5,7 @@ import pyqtgraph
 from pyLMS7002Soapy import pyLMS7002Soapy as pyLMSS
 import Qt_designer_VNA_Gui
 
-# limeSDR = pyLMSS.pyLMS7002Soapy(0)
-# lms7002 = limeSDR.LMS7002
-
 calThreshold = 500  # RSSI threshold to trigger RX DC cal. 250 is ~50% slower than 500
-# TxChan = 'A'
 
 #  LMS7002M acronyms and features #
 
@@ -25,7 +21,7 @@ calThreshold = 500  # RSSI threshold to trigger RX DC cal. 250 is ~50% slower th
 #  RFLB RF Loopback. RF Tx signal from PAD output fed to input of Rx LNA
 #  SXR Receive Synthesiser
 #  SXT Transmit Synthesiser
-#  TDD Mode = 1. The receive IQ mixer uses the signal from the transmit synthesizer
+#  TDD Mode = 1. The receive IQ mixer uses the signal from the transmit synthesiser
 
 
 class Measurement():
@@ -81,17 +77,16 @@ class Measurement():
             syncPhase(lms7002, Rx)
 
             # Check residual RSSI (DC offset?) at the set rx gain
-            TRF.PD_TXPAD_TRF = 1  # Turn off transmit power amplifier
+            TRF.PD_TXPAD_TRF = 'OFF'  # Transmit power amplifier
             calRSSI = lms7002.RxTSP[Rx].RSSI
             if calRSSI > calThreshold:
                 lms7002.calibration.rxDCLO(Rx, LNA, lnaGain=lnaGain, pgaGain=pgaGain)  # takes about 0.9s
                 calRSSI = lms7002.RxTSP[Rx].RSSI
-            TRF.PD_TXPAD_TRF = 0  # Turn on transmit power amplifier
+            TRF.PD_TXPAD_TRF = 'ON'
 
-            # get the (average of 3) RSSI value from the LimeSDR
+            # get the (averaged) RSSI value from the LimeSDR
             TxTSP.CMIX_BYP = 'USE'
-            lms7002.RxTSP[Rx].GC_BYP = 'USE'  # turn on gain corrector block
-            lms7002.RxTSP[Rx].GCORRQ = 0  # set Q channel gain to zero.
+            lms7002.RxTSP[Rx].GC_BYP = 'USE'  # turn on gain cor
             rssi = 1.0 * mcuRSSI(lms7002)
             TxTSP.CMIX_BYP = 'BYP'
             lms7002.RxTSP[Rx].GC_BYP = 'BYP'
@@ -262,7 +257,6 @@ def mcuRSSI(lms7002):
 
 
 def mcuPhase(lms7002, Rx):
-    # Use MCU to determine the phase
     # Phase is measured by setting I channel gain to zero using Rx TSP gain corrector
     # The Tx phase is then adjusted to minimise RSSI which occurs when Tx phase = Rx phase
     mcu = lms7002.mSPI
@@ -318,23 +312,23 @@ def adjustRxGain(lms7002, Rx, i):  # returns pga and lna gains for optimum dynam
     RxTSP.GCORRQ = 0
 
     if ui.setGain.isChecked():
-        if i == 0:  # set LNA gain at the start frequency only
-            lnaGain = 1
-            RFE.G_LNA_RFE = 1
-            RBB.G_PGA_RBB = 22  # set PGA gain with a little headroom
+        #if i == 0:  # set LNA gain at the start frequency only
+        lnaGain = 1
+        RFE.G_LNA_RFE = 1
+        RBB.G_PGA_RBB = 24  # set PGA gain with a little headroom
+        rssi = mcuRSSI(lms7002)
+        while rssi < 50e3 and lnaGain < 15:
             rssi = mcuRSSI(lms7002)
-            while rssi < 50e3 and lnaGain < 15:
-                rssi = mcuRSSI(lms7002)
-                lnaGain += 1
-                RFE.G_LNA_RFE = lnaGain
-                ui.RSSI.setValue(int(rssi))
-                ui.lnaGain.setValue(lnaGain)
-                app.processEvents()
-                hardware.lnaGain = lnaGain  # keep value for next call of adjustRxGain in Analyse()
-                if mcuRSSI(lms7002) >= 50e3:
-                    break
+            lnaGain += 2
+            RFE.G_LNA_RFE = lnaGain
+            ui.RSSI.setValue(int(rssi))
+            ui.lnaGain.setValue(lnaGain)
+            app.processEvents()
+            hardware.lnaGain = lnaGain  # keep value for next call of adjustRxGain in Analyse()
+            if mcuRSSI(lms7002) >= 50e3:
+                break
     else:
-        lnaGain = ui.lnaGain
+        lnaGain = ui.lnaGain.value()
 
     pgaGain = 0
     pgaStep = 16
@@ -385,7 +379,7 @@ def setTransceiver(lms7002, Rx, startFreq):
     else:
         TxNCO = lms7002.NCO["TXB"]
 
-    lms7002.fRef = hardware.fRef  # set correct clock frequency for hardware
+    lms7002.fRef = hardware.fRef  # set correct clock frequency for -USB or -Mini
     lms7002.MIMO = 'MIMO'
 
     # Initial configuration
@@ -432,10 +426,10 @@ def setTransceiver(lms7002, Rx, startFreq):
     TxNCO.setNCOFrequency(0, NCOfreq)
     TxNCO.SEL = 0
 
-    TRF.EN_LOOPB_TXPAD_TRF = 0
-    TRF.L_LOOPB_TXPAD_TRF = 0
-    TRF.PD_TLOBUF_TRF = 0
-    TRF.LOSS_MAIN_TXPAD_TRF = 0
+    TRF.EN_LOOPB_TXPAD_TRF = 'OFF'  # TxPAD loopback disabled
+    TRF.L_LOOPB_TXPAD_TRF = 0  # set loopback loss to zero
+    TRF.PD_TLOBUF_TRF = 0  # enable TX LO Buffer
+    TRF.LOSS_MAIN_TXPAD_TRF = 0  # Sets TxPAD o/p power by adjusting loss in range 0 to 31.  Max power = 0
     TRF.SEL_BAND1_TRF = hardware.band1
     TRF.SEL_BAND2_TRF = hardware.band2
 
@@ -443,19 +437,16 @@ def setTransceiver(lms7002, Rx, startFreq):
     lms7002.SX['R'].EN_DIR = 0
     lms7002.SX['T'].PD_LOCH_T2RBUF = 0  # Both RX and TX use the TX PLL
 
-    #  initial calibration of Rx DC
+    #  initial calibration of Rx DC with TxPAD off
     ui.InitialisedMessage.setText("Rx DC calibration")
     app.processEvents()
-    TRF.PD_TXPAD_TRF = 1  # Turn off tx power amplifier while calibrating RX DC
+    TRF.PD_TXPAD_TRF = 'OFF'
     lms7002.calibration.rxDCLO(Rx, hardware.lna, lnaGain=15, pgaGain=31)
-    TRF.PD_TXPAD_TRF = 0  # Turn on tx power amplifier
+    TRF.PD_TXPAD_TRF = 'ON'
 
-    #  valid MAC values are [1,2,'A','B','R','RX','T','TX']. Tells MCU which channel to use for trx, tx, rx
-    #  synthesisers SXT and SXR share register addresses so channel is identified by MAC setting
+    #  Tells MCU which channel to use for trx, tx, rx since synths SXT and SXR share register addresses
     lms7002.MAC = Rx
     ui.InitialisedMessage.setText("Ready")
-
-# connectedButtons(True)
 
 
 def ConnectSDR():
