@@ -383,18 +383,18 @@ def setTransceiver(lms7002, Rx, startFreq):
     lms7002.MIMO = 'MIMO'
 
     # Initial configuration
-    ui.InitialisedMessage.setText("Tuning Clock")
+    ui.InitialisedMessage.setText("Tuning Clock")   # emit a tuning clock signal
     app.processEvents()
     lms7002.CGEN.setCLK(300e6)  # set clock to 300MHz
     hardware.freqDepVar(startFreq)
-    ui.InitialisedMessage.setText("Tuning SXT")
-    app.processEvents()
+    ui.InitialisedMessage.setText("Tuning SXT") # emit a tuning sxt signal
+    # app.processEvents()
 
     startFreq = float(startFreq * 1e6)
     lms7002.SX['T'].setFREQ(startFreq)
 
     # Make ADC and DAC clocks equal
-    ui.InitialisedMessage.setText("Setting up RSSI")
+    ui.InitialisedMessage.setText("Setting up RSSI")    # emit a setting up rssi signal
     app.processEvents()
     lms7002.CGEN.EN_ADCCLKH_CLKGN = 0  # set ADC clock to F_CLKH and DAC clock to F_CLKL
     lms7002.CGEN.CLKH_OV_CLKL_CGEN = 2
@@ -438,15 +438,15 @@ def setTransceiver(lms7002, Rx, startFreq):
     lms7002.SX['T'].PD_LOCH_T2RBUF = 0  # Both RX and TX use the TX PLL
 
     #  initial calibration of Rx DC with TxPAD off
-    ui.InitialisedMessage.setText("Rx DC calibration")
-    app.processEvents()
+    ui.InitialisedMessage.setText("Rx DC calibration")  # emit rx dc cal signal
+    # app.processEvents()
     TRF.PD_TXPAD_TRF = 'OFF'
     lms7002.calibration.rxDCLO(Rx, hardware.lna, lnaGain=15, pgaGain=31)
     TRF.PD_TXPAD_TRF = 'ON'
 
     #  Tells MCU which channel to use for trx, tx, rx since synths SXT and SXR share register addresses
     lms7002.MAC = Rx
-    ui.InitialisedMessage.setText("Ready")
+    ui.InitialisedMessage.setText("Ready")  # emit ready signal
 
 
 def ConnectSDR():
