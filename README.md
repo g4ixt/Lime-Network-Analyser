@@ -1,4 +1,4 @@
-# !! It is not giving correct readings, I must have introduced a big.  Investigating...... !!
+# It is not giving correct readings, I must have introduced a bug.  Investigating.....
 
 # Lime Network Analyser
  
