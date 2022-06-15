@@ -1,3 +1,5 @@
+# !! It is not giving correct readings, I must have introduced a big.  Investigating...... !!
+
 # Lime Network Analyser
  
  This uses the example code from Myriad RF's Lime VNA, 
