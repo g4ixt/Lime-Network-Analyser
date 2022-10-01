@@ -6,19 +6,19 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>1110</width>
-    <height>896</height>
+    <width>1013</width>
+    <height>600</height>
    </rect>
   </property>
   <property name="windowTitle">
-   <string>LimeSDR network analyser</string>
+   <string>G4IXT LimeSDR network analyser</string>
   </property>
   <widget class="QWidget" name="centralwidget">
    <widget class="QGroupBox" name="groupBox">
     <property name="geometry">
      <rect>
-      <x>220</x>
-      <y>760</y>
+      <x>200</x>
+      <y>460</y>
       <width>211</width>
       <height>81</height>
      </rect>
@@ -123,8 +123,8 @@
     <property name="geometry">
      <rect>
       <x>10</x>
-      <y>760</y>
-      <width>201</width>
+      <y>460</y>
+      <width>181</width>
       <height>81</height>
      </rect>
     </property>
@@ -149,7 +149,7 @@
       <rect>
        <x>10</x>
        <y>60</y>
-       <width>181</width>
+       <width>161</width>
        <height>21</height>
       </rect>
      </property>
@@ -169,14 +169,14 @@
    <widget class="QGroupBox" name="groupBox_3">
     <property name="geometry">
      <rect>
-      <x>1000</x>
-      <y>0</y>
+      <x>900</x>
+      <y>10</y>
       <width>101</width>
-      <height>131</height>
+      <height>121</height>
      </rect>
     </property>
     <property name="title">
-     <string>Rx Channel 1</string>
+     <string>Return Loss</string>
     </property>
     <widget class="QPushButton" name="CalShortButton">
      <property name="enabled">
@@ -201,7 +201,7 @@
      <property name="geometry">
       <rect>
        <x>10</x>
-       <y>90</y>
+       <y>80</y>
        <width>81</width>
        <height>31</height>
       </rect>
@@ -214,7 +214,7 @@
      <property name="geometry">
       <rect>
        <x>10</x>
-       <y>70</y>
+       <y>66</y>
        <width>81</width>
        <height>8</height>
       </rect>
@@ -267,14 +267,14 @@
    <widget class="QGroupBox" name="groupBox_4">
     <property name="geometry">
      <rect>
-      <x>1000</x>
-      <y>130</y>
+      <x>900</x>
+      <y>160</y>
       <width>101</width>
-      <height>131</height>
+      <height>121</height>
      </rect>
     </property>
     <property name="title">
-     <string>Rx Channel 2</string>
+     <string>Through Loss</string>
     </property>
     <widget class="QPushButton" name="CalThroughButton">
      <property name="enabled">
@@ -299,7 +299,7 @@
      <property name="geometry">
       <rect>
        <x>10</x>
-       <y>90</y>
+       <y>80</y>
        <width>81</width>
        <height>31</height>
       </rect>
@@ -312,7 +312,7 @@
      <property name="geometry">
       <rect>
        <x>10</x>
-       <y>70</y>
+       <y>66</y>
        <width>81</width>
        <height>8</height>
       </rect>
@@ -365,8 +365,8 @@
    <widget class="QGroupBox" name="groupBox_5">
     <property name="geometry">
      <rect>
-      <x>1000</x>
-      <y>520</y>
+      <x>900</x>
+      <y>310</y>
       <width>101</width>
       <height>231</height>
      </rect>
@@ -516,8 +516,8 @@
      <rect>
       <x>10</x>
       <y>10</y>
-      <width>981</width>
-      <height>741</height>
+      <width>881</width>
+      <height>441</height>
      </rect>
     </property>
    </widget>
@@ -527,8 +527,8 @@
     </property>
     <property name="geometry">
      <rect>
-      <x>440</x>
-      <y>759</y>
+      <x>420</x>
+      <y>460</y>
       <width>61</width>
       <height>81</height>
      </rect>
@@ -584,10 +584,10 @@
    <widget class="QGroupBox" name="groupBox_7">
     <property name="geometry">
      <rect>
-      <x>1000</x>
-      <y>390</y>
-      <width>101</width>
-      <height>121</height>
+      <x>490</x>
+      <y>460</y>
+      <width>191</width>
+      <height>81</height>
      </rect>
     </property>
     <property name="title">
@@ -596,10 +596,10 @@
     <widget class="QCheckBox" name="SaveBox">
      <property name="geometry">
       <rect>
-       <x>10</x>
-       <y>90</y>
-       <width>94</width>
-       <height>24</height>
+       <x>100</x>
+       <y>54</y>
+       <width>61</width>
+       <height>23</height>
       </rect>
      </property>
      <property name="text">
@@ -610,8 +610,8 @@
      <property name="geometry">
       <rect>
        <x>10</x>
-       <y>30</y>
-       <width>90</width>
+       <y>55</y>
+       <width>71</width>
        <height>23</height>
       </rect>
      </property>
@@ -623,7 +623,7 @@
      <property name="geometry">
       <rect>
        <x>10</x>
-       <y>50</y>
+       <y>30</y>
        <width>90</width>
        <height>23</height>
       </rect>
@@ -635,8 +635,8 @@
     <widget class="QCheckBox" name="setGain">
      <property name="geometry">
       <rect>
-       <x>10</x>
-       <y>70</y>
+       <x>100</x>
+       <y>30</y>
        <width>90</width>
        <height>23</height>
       </rect>
@@ -652,10 +652,10 @@
    <widget class="QGroupBox" name="groupBox_6">
     <property name="geometry">
      <rect>
-      <x>1000</x>
-      <y>270</y>
-      <width>101</width>
-      <height>115</height>
+      <x>690</x>
+      <y>460</y>
+      <width>201</width>
+      <height>81</height>
      </rect>
     </property>
     <property name="title">
@@ -715,7 +715,7 @@
     <widget class="QLabel" name="label_8">
      <property name="geometry">
       <rect>
-       <x>60</x>
+       <x>50</x>
        <y>30</y>
        <width>41</width>
        <height>17</height>
@@ -731,8 +731,8 @@
      </property>
      <property name="geometry">
       <rect>
-       <x>8</x>
-       <y>80</y>
+       <x>100</x>
+       <y>50</y>
        <width>87</width>
        <height>26</height>
       </rect>
@@ -769,7 +769,7 @@
     <rect>
      <x>0</x>
      <y>0</y>
-     <width>1110</width>
+     <width>1013</width>
      <height>22</height>
     </rect>
    </property>

@@ -128,7 +128,6 @@ class Measurement():
             reference = str(self)  # a unique filename reference for the measurement instance
             writeDataFile(reference[32:-1], self.measType, self.freqs, self.res, self.resPhase)
 
-
 class Marker():
     '''Create amplitude and frequency markers using infinite lines'''
 
@@ -170,7 +169,7 @@ class Marker():
         self.Value = self.line.value()
 
 
-class setSDR():
+class SDR():
     '''Set values for Lime-Mini or Lime-USB and its frequency-dependent settings'''
 
     def setVariables(self):
@@ -383,18 +382,18 @@ def setTransceiver(lms7002, Rx, startFreq):
     lms7002.MIMO = 'MIMO'
 
     # Initial configuration
-    ui.InitialisedMessage.setText("Tuning Clock")   # emit a tuning clock signal
+    ui.InitialisedMessage.setText("Tuning Clock")  # emit a tuning clock signal instead
     app.processEvents()
     lms7002.CGEN.setCLK(300e6)  # set clock to 300MHz
     hardware.freqDepVar(startFreq)
-    ui.InitialisedMessage.setText("Tuning SXT") # emit a tuning sxt signal
+    ui.InitialisedMessage.setText("Tuning SXT")  # emit a tuning sxt signal instead
     # app.processEvents()
 
     startFreq = float(startFreq * 1e6)
     lms7002.SX['T'].setFREQ(startFreq)
 
     # Make ADC and DAC clocks equal
-    ui.InitialisedMessage.setText("Setting up RSSI")    # emit a setting up rssi signal
+    ui.InitialisedMessage.setText("Setting up RSSI")  # emit a setting up rssi signal instead
     app.processEvents()
     lms7002.CGEN.EN_ADCCLKH_CLKGN = 0  # set ADC clock to F_CLKH and DAC clock to F_CLKL
     lms7002.CGEN.CLKH_OV_CLKL_CGEN = 2
@@ -451,16 +450,21 @@ def setTransceiver(lms7002, Rx, startFreq):
 
 def ConnectSDR():
     # Connect to SDR and initialise
-    limeSDR = pyLMSS.pyLMS7002Soapy(0)
+    try:
+        limeSDR = pyLMSS.pyLMS7002Soapy(0)
+    except RuntimeError:
+        ui.InitialisedMessage.setText("Failed")
+        return
     lms7002 = limeSDR.LMS7002
     # lms7002.verbose = 1000
     hardware.setVariables()
     ui.ConnectButton.setText(hardware.sdrName)
-    ui.InitialisedMessage.setText("Loading VNA.hex to MCU")
+    ui.InitialisedMessage.setText("Load VNA.hex to MCU")
     app.processEvents()
     mcuProgram(lms7002)  # Load vna.hex to MCU SRAM for measuring RSSI
     connectedButtons(True)
     ui.InitialisedMessage.setText("Ready")
+    limeSDR.close
 
 ##############################################################################
 
@@ -557,7 +561,6 @@ def freqChanged():
 def initialiseButtons():
     ui.CalShortButton.setEnabled(False)
 
-
 # Create measurements and markers. Launch and respond to the GUI
 if __name__ == "__main__":
     app = QtWidgets.QApplication(sys.argv)
@@ -574,7 +577,7 @@ if __name__ == "__main__":
     throCurve = ui.graphWidget.plot([], [], name='Through Loss', pen='c', width=3)
 
     # instantiate measurements, markers, and hardware-dependent variables
-    hardware = setSDR()
+    hardware = SDR()
     short = Measurement()
     through = Measurement()
     DutRefl = Measurement()
