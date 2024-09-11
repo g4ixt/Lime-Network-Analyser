@@ -6,9 +6,19 @@ import pyqtgraph
 from pyLMS7002Soapy import pyLMS7002Soapy as pyLMSS
 import Qt_designer_VNA_Gui
 
-logging.basicConfig(format="%(message)s", level=logging.INFO)
+logging.basicConfig(format="%(message)s", level=logging.DEBUG)
+threadpool = QtCore.QThreadPool()
 
-calThreshold = 500  # RSSI threshold to trigger RX DC cal. 250 is ~50% slower than 500
+calThreshold = 10000  # RSSI threshold to trigger RX DC cal. 250 is ~50% slower than 500
+
+# pyqtgraph pens
+red = pyqtgraph.mkPen(color='r', width=1.0)
+yellow = pyqtgraph.mkPen(color='y', width=1.0)
+white = pyqtgraph.mkPen(color='w', width=1.0)
+magenta = pyqtgraph.mkPen(color='m', width=1.0)
+cyan = pyqtgraph.mkPen(color='c', width=1.0)
+red_dash = pyqtgraph.mkPen(color='r', width=0.5, style=QtCore.Qt.DashLine)
+blue_dash = pyqtgraph.mkPen(color='b', width=0.5,  style=QtCore.Qt.DashLine)
 
 #  LMS7002M Field Programmable RF Transceiver IC acronyms and features #
 
@@ -31,113 +41,30 @@ calThreshold = 500  # RSSI threshold to trigger RX DC cal. 250 is ~50% slower th
 class Measurement():
     '''Create measurements of Amplitude and Phase for lists of n frequencies (MHz)'''
 
-    # def Analyse(self, Calibration, Rx, measType):
-    #     # Measure received signal power and phase. Phase is not plotted (yet) but can be saved to file.
-    #     self.measType = measType
-    #     self.res = []
-    #     self.resPhase = []
-    #     self.pgaGains = []  # stores pga gains set per Freq during calibration
-    #     self.lnaGains = []  # stores lna gains set per Freq during calibration
-    #     self.refPhase = 0
-    #     power = []
-    #     freq = []
+    def __init__(self, name, pen):
+        self.sweeping = False
+        self.threadRunning = False
+        self.signals = WorkerSignals()
+        self.signals.result.connect(self.updateGUI)
+        # self.signals.finished.connect(self.threadEnds)
 
-    #     startFreq, endFreq, nFreq, centreFreq, spanFreq = getFreq()
-    #     nFreq += 1  # to give equal frequency spacing around centre freq
-    #     self.freqs = numpy.linspace(startFreq, endFreq, nFreq)
+        self.name = name
+        self.trace = ui.graphWidget.plot([], [], name=name, pen=pen, width=1, padding=0)
+        self.vline = ui.graphWidget.addLine(88, 90, movable=True, name=name,
+                                            pen=pyqtgraph.mkPen('y', width=0.5, style=QtCore.Qt.DashLine),
+                                            label="{value:.5f}")
+        # self.vline.sigClicked.connect(self.mClicked)
 
-    #     limeSDR.freqDepVar(startFreq)
-    #     LNA = limeSDR.lna
-    #     TxTSP = limeSDR.lms7002.TxTSP[limeSDR.txChan]
-    #     TRF = limeSDR.lms7002.TRF[limeSDR.txChan]
-    #     limeSDR.setTransceiver(Rx, startFreq)
+    def updateGUI(self, frequencies, amplitude, phase):
+        self.trace.setData(frequencies, amplitude)
 
-    #     #  valid MAC values are [1,2,'A','B','R','RX','T','TX']. Tells MCU which channel to use for trx, tx, rx
-    #     #  synthesisers SXT and SXR share register addresses so channel is identified by MAC setting
-    #     limeSDR.lms7002.MAC = Rx
-
-    #     for i in range(0, len(self.freqs)):
-    #         limeSDR.lms7002.verbose = 0  # controls logging level.  Set to 1000 for more detail
-    #         # f = self.freqs[i] * 1e6
-
-    #         # set freq and cal rx DC offset. Both Tx and Rx since rx is using tx PLL
-    #         limeSDR.lms7002.SX['T'].setFREQ(self.freqs[i] * 1e6)
-    #         limeSDR.lms7002.SX['T'].PD_LOCH_T2RBUF = 0  # set to use tx PLL (TDD Mode)
-
-    #         if Calibration != '':  # Set gains for DUT measurement to the calibrated values
-    #             pgaGain = Calibration.pgaGains[i]
-    #             lnaGain = Calibration.lnaGains[i]
-    #             limeSDR.lms7002.RBB[Rx].G_PGA_RBB = pgaGain
-    #             limeSDR.lms7002.RFE[Rx].G_LNA_RFE = lnaGain
-    #         else:
-    #             # optimise Rx gain for best dynamic range, return the values and append them to cal lists
-    #             pgaGain, lnaGain = limeSDR.adjustRxGain(Rx, i)
-    #             self.pgaGains.append(pgaGain)
-    #             self.lnaGains.append(lnaGain)
-
-    #         # set transmit and receive for testing? loopback?
-    #         limeSDR.syncPhase(Rx)
-
-    #         # Check residual RSSI (DC offset?) at the set rx gain
-    #         TRF.PD_TXPAD_TRF = 'OFF'  # Transmit power amplifier
-    #         calRSSI = limeSDR.lms7002.RxTSP[Rx].RSSI
-    #         if calRSSI > calThreshold:
-    #             limeSDR.lms7002.calibration.rxDCLO(Rx, LNA, lnaGain=lnaGain, pgaGain=pgaGain)  # takes about 0.9s
-    #             calRSSI = limeSDR.lms7002.RxTSP[Rx].RSSI
-    #         TRF.PD_TXPAD_TRF = 'ON'
-
-    #         # get the (averaged) RSSI value from the LimeSDR for the currently set SXT frequency
-    #         TxTSP.CMIX_BYP = 'USE'
-    #         limeSDR.lms7002.RxTSP[Rx].GC_BYP = 'USE'  # turn on gain cor
-    #         rssi = 1.0 * limeSDR.mcuRSSI()
-    #         TxTSP.CMIX_BYP = 'BYP'
-    #         limeSDR.lms7002.RxTSP[Rx].GC_BYP = 'BYP'
-    #         limeSDR.lms7002.RxTSP[Rx].GCORRQ = 2047
-
-    #         # add the RSSI value to the magnitude list 'res', in position i
-    #         self.res.append(rssi)
-    #         DutPower = 20 * numpy.log10(rssi)
-
-    #         # measure phase for freq i and append to list.
-    #         if ui.Phase.isChecked():
-    #             if Calibration == "":
-    #                 if i == 0:
-    #                     self.refPhase = limeSDR.mcuPhase(Rx)
-    #                 phase = limeSDR.mcuPhase(Rx) - self.refPhase  # set cal phase ref=zero at start freq
-    #             else:
-    #                 phase = limeSDR.mcuPhase(Rx) - Calibration.refPhase
-    #             self.resPhase.append(phase)
-    #         else:
-    #             self.resPhase.append(0)
-
-    #         # plot the results on the GUI graphwidget and update the progress indicators.
-    #         freq.append(self.freqs[i])
-    #         progress = int((i+1)*100/len(self.freqs))
-    #         if Calibration == '':
-    #             CalPower = 0
-    #         else:
-    #             CalPower = 20 * numpy.log10(Calibration.res[i])
-    #         power.append(DutPower-CalPower)
-    #         if measType == 'ReturnLoss':
-    #             ui.calShortProgress.setValue(progress)
-    #             rlCurve.setData(freq, power)
-    #         else:
-    #             ui.calThroughProgress.setValue(progress)
-    #             throCurve.setData(freq, power)
-
-    #     if ui.SaveBox.isChecked():
-    #         reference = str(self)  # a unique filename reference for the measurement instance
-    #         writeDataFile(reference[32:-1], self.measType, self.freqs, self.res, self.resPhase)
-
-    def Analyse(self, calType, Rx, measType):
+    def measure(self, calibrated, Rx):
         # Measure received signal power and phase. Phase is not plotted (yet) but can be saved to file.
+        updateTimer = QtCore.QElapsedTimer()
 
-        power = []
-        freq = []
-
-        startFreq, endFreq, nFreq, centreFreq, spanFreq = getFreq()
-        nFreq += 1  # to give equal frequency spacing around centre freq
-        self.freqs = numpy.linspace(startFreq, endFreq, nFreq)
+        startFreq, endFreq, points, centreFreq, spanFreq = getFreq()
+        # nFreq += 1  # to give equal frequency spacing around centre freq
+        self.freqs = numpy.linspace(startFreq, endFreq, points)
 
         limeSDR.freqDepVar(startFreq)
         LNA = limeSDR.lna
@@ -145,99 +72,104 @@ class Measurement():
         TRF = limeSDR.lms7002.TRF[limeSDR.txChan]
         limeSDR.setTransceiver(Rx, startFreq)
 
-        self.amplitude = numpy.full(nFreq, None, dtype=float)
-        self.phase = numpy.full(nFreq, None, dtype=float)
-        self.pgaGains = numpy.full(nFreq, None, dtype=float)  # stores pga gains set per Freq during calibration
-        self.lnaGains = numpy.full(nFreq, None, dtype=float)  # stores lna gains set per Freq during calibration
+        self.amplitude = numpy.full(points, None, dtype=float)
+        self.phase = numpy.full(points, None, dtype=float)
+        self.pgaGains = numpy.full(points, None, dtype=float)  # stores pga gains set per Freq during calibration
+        self.lnaGains = numpy.full(points, None, dtype=float)  # stores lna gains set per Freq during calibration
         self.refPhase = 0
+        power = numpy.full(points, None, dtype=float)
 
         #  valid MAC values are [1,2,'A','B','R','RX','T','TX']. Tells MCU which channel to use for trx, tx, rx
         #  synthesisers SXT and SXR share register addresses so channel is identified by MAC setting
         limeSDR.lms7002.MAC = Rx
+        limeSDR.lms7002.verbose = 0  # controls logging level.  Set to 1000 for more detail
 
-        for i in range(0, len(self.freqs)):
-            limeSDR.lms7002.verbose = 0  # controls logging level.  Set to 1000 for more detail
-            # f = self.freqs[i] * 1e6
+        while self.sweeping:
+            updateTimer.start()
+            for f in range(0, len(self.freqs)):
+                # set freq and cal rx DC offset. Both Tx and Rx since rx is using tx PLL
+                limeSDR.lms7002.SX['T'].setFREQ(self.freqs[f] * 1e6)
+                limeSDR.lms7002.SX['T'].PD_LOCH_T2RBUF = 0  # set to use tx PLL (TDD Mode)
 
-            # set freq and cal rx DC offset. Both Tx and Rx since rx is using tx PLL
-            limeSDR.lms7002.SX['T'].setFREQ(self.freqs[i] * 1e6)
-            limeSDR.lms7002.SX['T'].PD_LOCH_T2RBUF = 0  # set to use tx PLL (TDD Mode)
-
-            if calType != '':  # Set gains for DUT measurement to the calibrated values
-                pgaGain = calType.pgaGains[i]
-                lnaGain = calType.lnaGains[i]
-                limeSDR.lms7002.RBB[Rx].G_PGA_RBB = pgaGain
-                limeSDR.lms7002.RFE[Rx].G_LNA_RFE = lnaGain
-            else:
-                # optimise Rx gain for best dynamic range, return the values and store in array
-                pgaGain, lnaGain = limeSDR.adjustRxGain(Rx, i)
-                self.pgaGains[i] = pgaGain
-                self.lnaGains[i] = lnaGain
-
-            # set transmit and receive for testing? loopback?
-            limeSDR.syncPhase(Rx)
-
-            # Check residual RSSI (DC offset?) at the set rx gain
-            TRF.PD_TXPAD_TRF = 'OFF'  # Transmit power amplifier
-            calRSSI = limeSDR.lms7002.RxTSP[Rx].RSSI
-            if calRSSI > calThreshold:
-                limeSDR.lms7002.calibration.rxDCLO(Rx, LNA, lnaGain=lnaGain, pgaGain=pgaGain)  # takes about 0.9s
-                calRSSI = limeSDR.lms7002.RxTSP[Rx].RSSI
-            TRF.PD_TXPAD_TRF = 'ON'
-
-            # get the (averaged) RSSI value from the LimeSDR for the currently set SXT frequency
-            TxTSP.CMIX_BYP = 'USE'
-            limeSDR.lms7002.RxTSP[Rx].GC_BYP = 'USE'  # turn on gain cor
-            rssi = 1.0 * limeSDR.mcuRSSI()
-            TxTSP.CMIX_BYP = 'BYP'
-            limeSDR.lms7002.RxTSP[Rx].GC_BYP = 'BYP'
-            limeSDR.lms7002.RxTSP[Rx].GCORRQ = 2047
-
-            # add the RSSI value to the magnitude list 'res', in position i
-            self.amplitude[i] = rssi
-            DutPower = 20 * numpy.log10(rssi)
-
-            # measure phase for freq i and append to list.
-            if ui.Phase.isChecked():
-                if calType == "":
-                    if i == 0:
-                        self.refPhase = limeSDR.mcuPhase(Rx)
-                    phase = limeSDR.mcuPhase(Rx) - self.refPhase  # set cal phase ref=zero at start freq
+                if calibrated:  # Set gains for DUT measurement to the calibrated values
+                    limeSDR.lms7002.RBB[Rx].G_PGA_RBB = int(calibrated.pgaGains[f])
+                    limeSDR.lms7002.RFE[Rx].G_LNA_RFE = int(calibrated.lnaGains[f])
                 else:
-                    phase = limeSDR.mcuPhase(Rx) - calType.refPhase
-                self.phase[i] = phase
-            else:
-                self.phase[i] = 0
+                    # optimise Rx gain for best dynamic range, return the values and store in array
+                    pgaGain, lnaGain = limeSDR.adjustRxGain(Rx, f)
+                    self.pgaGains[f] = pgaGain
+                    self.lnaGains[f] = lnaGain
 
-            # plot the results on the GUI graphwidget and update the progress indicators.
-            # freq.append(self.freqs[i])
-            # progress = int((i+1)*100/len(self.freqs))
-            if calType == '':
-                CalPower = 0
-            else:
-                CalPower = 20 * numpy.log10(calType.amplitude[i])
-            power.append(DutPower-CalPower)
-            if measType == 'ReturnLoss':
-                # ui.calShortProgress.setValue(progress)
-                rlCurve.setData(freq, power)
-            else:
-                # ui.calThroughProgress.setValue(progress)
-                throCurve.setData(freq, power)
+                # set transmit and receive for testing? loopback?
+                limeSDR.syncPhase(Rx)
 
-        if ui.SaveBox.isChecked():
-            reference = str(self)  # a unique filename reference for the measurement instance
-            writeDataFile(reference[32:-1], self.measType, self.freqs, self.res, self.resPhase)
+                # Check residual RSSI (DC offset?) at the set rx gain
+                logging.info('calibrating RX path')
+                TRF.PD_TXPAD_TRF = 'OFF'  # Transmit power amplifier off whilst calibrating Rx DC
+                calRSSI = limeSDR.lms7002.RxTSP[Rx].RSSI
+                logging.debug(f'calRSSI {self.freqs[f]} = {calRSSI}')
+                if calRSSI > calThreshold:
+                    limeSDR.lms7002.calibration.rxDCLO(Rx, LNA, lnaGain=lnaGain, pgaGain=pgaGain)  # takes about 0.9s
+                    calRSSI = limeSDR.lms7002.RxTSP[Rx].RSSI
+                    logging.debug(f'Updated calRSSI {self.freqs[f]} = {calRSSI}')
+                TRF.PD_TXPAD_TRF = 'ON'
+
+                # get the (averaged) RSSI value from the LimeSDR for the currently set SXT frequency
+                TxTSP.CMIX_BYP = 'USE'
+                limeSDR.lms7002.RxTSP[Rx].GC_BYP = 'USE'  # turn on gain corrector
+                limeSDR.lms7002.RxTSP[Rx].GCORRQ = 0  # this line from the original code was missing
+
+                rssi = 1.0 * limeSDR.mcuRSSI()
+
+                TxTSP.CMIX_BYP = 'BYP'
+                limeSDR.lms7002.RxTSP[Rx].GC_BYP = 'BYP'  # turn off gain corrector
+                limeSDR.lms7002.RxTSP[Rx].GCORRQ = 2047
+
+                # store the RSSI value in the amplitude array as dBx (x because units are not known)
+                # self.amplitude[f] = 20 * numpy.log10(rssi)
+                self.amplitude[f] = rssi
+
+
+                # measure phase and store in the phase array
+                if ui.Phase.isChecked():
+                    if not calibrated:
+                        if f == 0:
+                            self.refPhase = limeSDR.mcuPhase(Rx)
+                        phase = limeSDR.mcuPhase(Rx) - self.refPhase  # set cal phase ref=zero at start freq
+                    else:
+                        phase = limeSDR.mcuPhase(Rx) - calibrated.refPhase
+                    self.phase[f] = phase
+                else:
+                    self.phase[f] = 0
+
+                if calibrated and calibrated == short:
+                    power[f] = 20 * numpy.log10(rssi / calibrated.amplitude[f])
+                else:
+                    power[f] = 20 * numpy.log10(rssi / 50000)
+
+                # if calibrated and calibrated == through:
+                #     power[f] = 20 * numpy.log10(rssi) - 20 * numpy.log10(calibrated.amplitude[f])
+                # else:
+                #     power[f] = 20 * numpy.log10(rssi / 50000)
+
+                 # send results to the GUI
+                timeElapsed = updateTimer.nsecsElapsed()  # how long the thread has been running, nS
+                if timeElapsed/1e6 > 50:
+                    logging.debug(f'rssi = {rssi}  power = {power[f]}')
+                    self.signals.result.emit(self.freqs, power, self.phase)  # send to updateGUI()
+                    updateTimer.start()
+            if not calibrated:
+                self.sweeping = False
+            else:
+                self.sweeping = False  # for testing
+
+        # if ui.SaveBox.isChecked():
+        #     reference = str(self)  # a unique filename reference for the measurement instance
+        #     writeDataFile(reference[32:-1], self.measType, self.freqs, self.res, self.resPhase)
 
 
 class SDR():
     '''Set values for Lime-Mini or Lime-USB and its frequency-dependent settings'''
-
-    # def __init__(self):
-    #     self.amplitude = numpy.ndarray
-    #     self.phase = numpy.ndarray
-    #     self.pgaGains = numpy.ndarray  # stores pga gains set per Freq during calibration
-    #     self.lnaGains = numpy.ndarray  # stores lna gains set per Freq during calibration
-    #     self.refPhase = 0
 
     def setVariables(self):
         #  set variables to the correct values for Lime-Mini or Lime-USB
@@ -295,7 +227,7 @@ class SDR():
             logging.info(f'Firmware ID is {firmwareID}, but expected 49')
             sys.exit(1)
         else:
-            logging.info(f'Firmware ID is correct {firmwareID}')
+            logging.info(f'Firmware ID {firmwareID} is correct')
         mcu.P0 = 0
         self.lms7002.MAC = 'A'  # Added 11 Jul 2024
 
@@ -372,7 +304,7 @@ class SDR():
                 RFE.G_LNA_RFE = lnaGain
                 ui.RSSI.setValue(int(rssi))
                 ui.lnaGain.setValue(lnaGain)
-                limeSDR.lnaGain = lnaGain  # keep value for next call of adjustRxGain in Analyse()
+                limeSDR.lnaGain = lnaGain  # keep value for next call of adjustRxGain in measure()
                 if self.mcuRSSI() >= 50e3:
                     break
         else:
@@ -414,11 +346,11 @@ class SDR():
         self.lms7002.MIMO = 'MIMO'
 
         # Initial configuration
-        logging.debug("Tuning Clock")
+        logging.info("Tuning Clock")
         self.lms7002.CGEN.setCLK(300e6)  # set clock to 300MHz
         limeSDR.freqDepVar(startFreq)
-        logging.debug("Tuning SXT")
 
+        logging.info("Tuning Transmit Synthesiser")
         startFreq = float(startFreq * 1e6)
         self.lms7002.SX['T'].setFREQ(startFreq)
 
@@ -466,7 +398,7 @@ class SDR():
         self.lms7002.SX['T'].PD_LOCH_T2RBUF = 0  # Both RX and TX use the TX PLL
 
         #  initial calibration of Rx DC with TxPAD off
-        logging.debug("Rx DC calibration")
+        logging.info("Rx {Rx} DC calibration")
         TRF.PD_TXPAD_TRF = 'OFF'
         self.lms7002.calibration.rxDCLO(Rx, limeSDR.lna, lnaGain=15, pgaGain=31)
         TRF.PD_TXPAD_TRF = 'ON'
@@ -486,15 +418,15 @@ class SDR():
         # lms7002.verbose = 1000
         limeSDR.setVariables()
         ui.ConnectButton.setText(limeSDR.sdrName)
-        ui.InitialisedMessage.setText("Load VNA.hex to MCU")
+        # ui.InitialisedMessage.setText("Load VNA.hex to MCU")
         self.mcuProgram()  # Load vna.hex to MCU SRAM for measuring RSSI
         connectedButtons(True)
-        ui.InitialisedMessage.setText("Ready")
+        # ui.InitialisedMessage.setText("Ready")
 
 
 class WorkerSignals(QtCore.QObject):
     error = QtCore.pyqtSignal(str)
-    result = QtCore.pyqtSignal(numpy.ndarray, numpy.ndarray, numpy.ndarray, float)
+    result = QtCore.pyqtSignal(numpy.ndarray, numpy.ndarray, numpy.ndarray)
     fullSweep = QtCore.pyqtSignal(numpy.ndarray, numpy.ndarray)
     finished = QtCore.pyqtSignal()
 
@@ -556,9 +488,23 @@ class Marker():
         ui.Marker5.setValue(Marker5.line.value())
         self.Value = self.line.value()
 
+
+class Display():
+
+    def __init__(self, name, pen):
+        self.name = name
+        self.trace = ui.graphWidget.plot([], [], name=name, pen=pen, width=1, padding=0)
+        self.vline = ui.graphWidget.addLine(88, 90, movable=True, name=name,
+                                            pen=pyqtgraph.mkPen('y', width=0.5, style=QtCore.Qt.DashLine),
+                                            label="{value:.5f}")
+        # self.vline.sigClicked.connect(self.mClicked)
+
+    def updateGUI(self, frequencies, amplitude, phase):
+        self.trace.setData(frequencies, amplitude)
+
+
 #################################################
 # Auxiliary functions
-
 
 def writeDataFile(measName, measType, freqs, res, resPhase):
     # For compatibility with original 'calculateVNA'. (Filename needs to be amended after.)
@@ -572,7 +518,6 @@ def writeDataFile(measName, measType, freqs, res, resPhase):
         txtRes += str(f) + '\t' + str(y) + '\t' + str(phase) + '\t' + '\n'
     outFile.write(txtRes)
     outFile.close()
-
 
 ##############################################################################
 
@@ -601,39 +546,44 @@ def measureButtons(enable):
 
 
 def calReturnLoss():
-    ui.graphWidget.setYRange(-100, 100)
-    ui.calShortProgress.setValue(0)
-    startFreq, endFreq, nFreq, centreFreq, spanFreq = getFreq()
-    short.Analyse('', 'A', 'ReturnLoss')
+    ui.graphWidget.setYRange(-1, 1)
+    sweep = Worker(short.measure, False, 'A')  # workers are auto-deleted when thread stops
+    short.sweeping = True
+    threadpool.start(sweep)
+#    short.measure('', 'A', 'ReturnLoss')
     ui.MeasureRLButton.setEnabled(True)
 
 
 def calThroughLoss():
-    ui.graphWidget.setYRange(-100, 100)
-    ui.calThroughProgress.setValue(0)
-    startFreq, endFreq, nFreq, centreFreq, spanFreq = getFreq()
-    through.Analyse('', 'B', 'ThroughLoss')
+    ui.graphWidget.setYRange(-1, 1)
+    sweep = Worker(through.measure, False, 'B')  # workers are auto-deleted when thread stops
+    through.sweeping = True
+    threadpool.start(sweep)
+#    through.measure('', 'B', 'ThroughLoss')
     ui.MeasureThroughButton.setEnabled(True)
 
 
 def measReturnLoss():
     ui.graphWidget.setYRange(-35, 5)
-    while ui.Repeat.isChecked():
-        DutRefl.Analyse(short, 'A', 'ReturnLoss')
-        if not ui.Repeat.isChecked():
-            break
-    else:
-        DutRefl.Analyse(short, 'A', 'ReturnLoss')
+    sweep = Worker(S11.measure, short, 'A')
+    S11.sweeping = True
+    threadpool.start(sweep)
+    # while ui.Repeat.isChecked():
+    #     S11.measure(short, 'A', 'ReturnLoss')
+    #     if not ui.Repeat.isChecked():
+    #         break
+    # else:
+    #     S11.measure(short, 'A', 'ReturnLoss')
 
 
 def measThroughLoss():
     ui.graphWidget.setYRange(-35, 5)
     while ui.Repeat.isChecked():
-        DutThro.Analyse(through, 'B', 'ThroughLoss')
+        S12.measure(through, 'B', 'ThroughLoss')
         if not ui.Repeat.isChecked():
             break
     else:
-        DutThro.Analyse(through, 'B', 'ThroughLoss')
+        S12.measure(through, 'B', 'ThroughLoss')
 
 
 def getFreq():
@@ -692,15 +642,15 @@ ui.graphWidget.setLabel('left', 'Relative Signal Power dB')
 ui.graphWidget.setXRange(1250, 1350)
 ui.graphWidget.setYRange(-35, 5)
 ui.graphWidget.addLegend(offset=2)
-rlCurve = ui.graphWidget.plot([], [], name='Return Loss', pen='y', width=5)
-throCurve = ui.graphWidget.plot([], [], name='Through Loss', pen='c', width=3)
+# rlCurve = ui.graphWidget.plot([], [], name='Return Loss', pen='y', width=5)
+# throCurve = ui.graphWidget.plot([], [], name='Through Loss', pen='c', width=3)
 
 # instantiate measurements, markers, and lime-dependent variables
+S11 = Measurement('Return Loss', yellow)
+S12 = Measurement('Through Loss', cyan)
+short = Measurement('Return Loss Cal', magenta)
+through = Measurement('Through Loss Cal', white)
 limeSDR = SDR()
-short = Measurement()
-through = Measurement()
-DutRefl = Measurement()
-DutThro = Measurement()
 
 Marker1 = Marker('freq', 0, 0.99)
 Marker2 = Marker('freq', 0, 0.97)
